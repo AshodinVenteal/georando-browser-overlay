@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>GeoRando AP Overlay</title>
+  <style>
+    :root{color-scheme:dark;--bg:#101216;--panel:#191d24;--line:#303743;--text:#edf1f7;--muted:#9ba7b8;--accent:#70d6a2;--warn:#ffcc66}
+    *{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at 80% 0,#20302d 0,#101216 38%);color:var(--text);font:15px system-ui,sans-serif;min-height:100vh}
+    header{padding:22px 28px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)} h1{font-size:22px;margin:0} h2{font-size:16px;margin:0 0 12px} .status{color:var(--muted)} .ok{color:var(--accent)} .bad{color:#ff8b8b}
+    main{display:grid;grid-template-columns:290px 1fr 320px;gap:16px;padding:16px;max-width:1500px;margin:auto}.panel{background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:0 10px 30px #0003}
+    label{display:block;color:var(--muted);font-size:12px;margin:10px 0 5px} input,select,button{font:inherit;border-radius:7px;border:1px solid var(--line);background:#0f1217;color:var(--text);padding:9px;width:100%} button{cursor:pointer;background:#26302f}button:hover{border-color:var(--accent)} button.primary{background:#285b49;border-color:#4caa81;font-weight:600}.row{display:flex;gap:8px}.row>*{flex:1}.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}.stat{background:#101319;border-radius:8px;padding:10px}.stat b{display:block;font-size:20px}.stat span{color:var(--muted);font-size:12px}.list{display:grid;gap:7px;max-height:calc(100vh - 170px);overflow:auto}.check{display:flex;align-items:center;gap:10px;text-align:left}.check.done{opacity:.5;text-decoration:line-through}.check small{display:block;color:var(--muted);margin-left:auto}.item{padding:9px;border-bottom:1px solid #2a3039}.item small{color:var(--muted)}.toolbar{display:flex;gap:8px;margin-bottom:12px}.toolbar input{flex:1}.toolbar select{width:180px}.note{color:var(--muted);font-size:12px;line-height:1.45}.hidden{display:none}@media(max-width:950px){main{grid-template-columns:1fr 1fr}.side{grid-column:1/-1}}@media(max-width:650px){main{display:block}.panel{margin-bottom:12px}}
+  </style>
+</head>
+<body>
+  <header><h1>GeoRando <span class="status">browser overlay</span></h1><div id="connection" class="status">Disconnected</div></header>
+  <main>
+    <section class="panel">
+      <h2>Archipelago connection</h2>
+      <label for="server">Server (host:port)</label><input id="server" value="archipelago.gg:38281" placeholder="localhost:38281">
+      <label for="slot">Player / slot</label><input id="slot" placeholder="Your YAML player name">
+      <label for="password">Password (optional)</label><input id="password" type="password">
+      <div class="row" style="margin-top:12px"><button id="connect" class="primary">Connect</button><button id="disconnect">Disconnect</button></div>
+      <p class="note">The overlay uses the same Archipelago WebSocket protocol as Manual Client. Keep Manual Client open if you want its chat or backup view, but only use one tool to perform a given check.</p>
+      <div class="stats"><div class="stat"><b id="checked">0</b><span>checks complete</span></div><div class="stat"><b id="received">0</b><span>items received</span></div></div>
+      <p id="message" class="note"></p>
+    </section>
+    <section class="panel"><h2>GeoRando checks</h2><div class="toolbar"><input id="filter" placeholder="Filter checks…"><select id="group"><option value="">All groups</option></select></div><div id="locations" class="list"><p class="note">Connect to load locations.</p></div></section>
+    <section class="panel side"><h2>Received items</h2><div id="items" class="list"><p class="note">Items will appear here after connecting.</p></div><h2 style="margin-top:18px">Session</h2><p id="session" class="note">Not connected.</p></section>
+  </main>
+<script>
+const $=id=>document.getElementById(id); let ws=null, data={}, locationIds={}, itemIds={}, locations=[], checked=new Set(), items=[], slot=0, playerNames={};
+const saved=JSON.parse(localStorage.getItem('georando-overlay')||'{}'); ['server','slot'].forEach(k=>{if(saved[k])$(k).value=saved[k]});
+function show(text,kind=''){ $('message').textContent=text; $('message').className='note '+kind }
+function send(packet){if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify([packet]))}
+function connect(){disconnect(); let address=$('server').value.trim(); if(!address.includes(':'))address+=':38281'; if(!/^wss?:\/\//.test(address))address=(location.protocol==='https:'?'wss://':'ws://')+address; localStorage.setItem('georando-overlay',JSON.stringify({server:$('server').value,slot:$('slot').value})); show('Connecting…'); try{ws=new WebSocket(address)}catch(e){show(e.message,'bad');return} ws.onopen=()=>{show('Authenticating…','ok');send({cmd:'Connect',game:'Manual_GeoGuessr_arborelia',name:$('slot').value.trim(),password:$('password').value||null,uuid:'georando-browser-overlay',version:{major:0,minor:4,build:0},tags:['AP']})}; ws.onmessage=e=>{try{JSON.parse(e.data).forEach(handle)}catch(err){show('Invalid server message: '+err.message,'bad')}}; ws.onclose=()=>{ $('connection').textContent='Disconnected';$('connection').className='status bad';show('Connection closed.','bad')}; ws.onerror=()=>show('Could not connect. Check the host, port, and whether the server is reachable from this browser.','bad') }
+function disconnect(){if(ws){ws.onclose=null;ws.close();ws=null}$('connection').textContent='Disconnected';$('connection').className='status'}
+function handle(p){switch(p.cmd){case'RoomInfo': if(!data.version)send({cmd:'GetDataPackage',games:['Manual_GeoGuessr_arborelia']});break;case'DataPackage': data=p.data||{}; break;case'Connected': connected(p);break;case'ConnectionRefused': show((p.errors||['Connection refused']).join(' '),'bad');break;case'ReceivedItems': p.items?.forEach(x=>items.push(x));renderItems();$('received').textContent=items.length;break;case'Print': if(p.text)show(typeof p.text==='string'?p.text:JSON.stringify(p.text));break;case'Retrieved':break}}
+function connected(p){slot=p.slot; checked=new Set(p.checked_locations||[]); playerNames={};(p.players||[]).forEach(x=>playerNames[x.slot]=x.alias||x.name); const game=p.slot_data?.game||'GeoGuessr'; const pack=data.games?.[game]||Object.values(data.games||{})[0]||{}; locationIds=pack.location_name_to_id||{};itemIds=pack.item_name_to_id||{}; locations=Object.entries(locationIds).map(([name,id])=>({name,id,group:name.includes(':')?name.split(':')[0]:'Other'})).sort((a,b)=>a.name.localeCompare(b.name)); $('connection').textContent='Connected';$('connection').className='status ok';$('session').textContent=`${game} • ${playerNames[slot]||$('slot').value} • slot ${slot}`; buildGroups();renderLocations();renderItems();$('checked').textContent=checked.size;show('Connected to Archipelago.','ok')}
+function buildGroups(){let groups=[...new Set(locations.map(x=>x.group))].sort();$('group').innerHTML='<option value="">All groups</option>'+groups.map(x=>`<option>${esc(x)}</option>`).join('')}
+function renderLocations(){let q=$('filter').value.toLowerCase(),g=$('group').value;let view=locations.filter(x=>(!q||x.name.toLowerCase().includes(q))&&(!g||x.group===g));$('locations').innerHTML=view.length?view.map(x=>`<button class="check ${checked.has(x.id)?'done':''}" data-id="${x.id}">${esc(x.name)}<small>${checked.has(x.id)?'checked':'check'}</small></button>`).join(''):'<p class="note">No matching checks.</p>';document.querySelectorAll('.check').forEach(b=>b.onclick=()=>check(Number(b.dataset.id)))}
+function check(id){if(checked.has(id))return;if(!ws||ws.readyState!==WebSocket.OPEN){show('Connect before checking a location.','bad');return}send({cmd:'LocationChecks',locations:[id]});checked.add(id);$('checked').textContent=checked.size;renderLocations();show('Check sent to Archipelago.','ok')}
+function renderItems(){if(!items.length){$('items').innerHTML='<p class="note">No items received yet.</p>';return}let names=Object.fromEntries(Object.entries(itemIds).map(([n,id])=>[id,n]));let counts={};items.forEach(x=>{let n=names[x.item]||`Item ${x.item}`;counts[n]=(counts[n]||0)+1});$('items').innerHTML=Object.entries(counts).sort().map(([n,c])=>`<div class="item">${esc(n)}${c>1?` <small>×${c}</small>`:''}</div>`).join('')}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+$('connect').onclick=connect;$('disconnect').onclick=disconnect;$('filter').oninput=renderLocations;$('group').onchange=renderLocations;$('slot').addEventListener('keydown',e=>{if(e.key==='Enter')connect()});
+</script></body></html>
