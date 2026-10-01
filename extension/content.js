@@ -25,7 +25,16 @@
         <label for="password">Room password (optional)</label><input id="password" type="password" autocomplete="off">
         <div class="row"><button class="primary" id="connect">Connect</button><button id="disconnect">Disconnect</button></div>
       </details></section>
-      <section><h2>Unlock allowances</h2><div id="allowances" class="muted">Connect to load received items.</div><p class="muted">Set game restrictions manually. Automatic result capture and restriction enforcement are not enabled in this version.</p></section>
+      <section><h2>Unlock allowances</h2><div id="allowances" class="muted">Connect to load received items.</div><p class="muted">Set game restrictions manually. Restriction enforcement is not enabled in this version.</p></section>
+      <section><details><summary>Completed-game score checks (experimental)</summary>
+        <p class="muted">On a classic /results/ page, read your completed game, select its AP map, and review the suggested checks.</p>
+        <button id="capture">Read completed result</button><p id="result-summary" class="muted">No result captured.</p>
+        <label for="result-map">AP map for this result</label><select id="result-map"><option value="">Choose map…</option></select>
+        <label for="result-bonus">Round bonus earned before playing (including country bonus if applicable)</label><input id="result-bonus" type="number" min="0" step="1" value="0">
+        <p class="muted">Enter the bonus applicable to this run. It never applies to individual location scores.</p>
+        <div id="suggestions" class="list"></div><button id="submit-result" disabled>Review and send score checks…</button>
+        <p class="muted">Country, streak, and medal checks still use the manual checklist.</p>
+      </details></section>
       <section><h2>Checks</h2><input id="search" placeholder="Search country, map, score…" aria-label="Search checks"><div class="row"><select id="group" aria-label="Check group"><option value="">All groups</option></select><button id="completed">Show completed</button></div><div id="checks" class="list"></div><p class="muted" id="check-count"></p></section>
       <section><details><summary>Received items</summary><div id="items" class="list"></div></details></section>
       <section><details><summary>AP messages</summary><div id="log" class="log"></div></details></section>
@@ -33,6 +42,7 @@
     </div>`;
   const $ = id => root.getElementById(id);
   let port, state, initialized = false, showCompleted = false, collapsed = false, confirmId = null, side = 'left';
+  let result = null, capturePath = '', candidates = [], loading = false;
   const escape = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
   function attach() {
     const target = document.fullscreenElement || document.body;
@@ -50,6 +60,50 @@
   }
   $('connect').onclick = () => send({type: 'connect', settings: {server: $('server').value, player: $('player').value, game: $('game').value}, password: $('password').value});
   $('disconnect').onclick = () => { $('password').value = ''; send({type: 'disconnect'}); };
+  $('capture').onclick = async () => {
+    const match = /^\/results\/([A-Za-z0-9_-]+)\/?$/.exec(location.pathname);
+    if (!match) { $('error').textContent = 'Open the completed classic game results page first.'; return; }
+    loading = true; result = null; renderResult();
+    capturePath = location.pathname;
+    const path = capturePath;
+    try {
+      const response = await fetch(`/api/v3/games/${encodeURIComponent(match[1])}`, {credentials: 'same-origin', signal: AbortSignal.timeout(10000)});
+      if (!response.ok) throw new Error(`GeoGuessr returned HTTP ${response.status}.`);
+      const game = await response.json();
+      if (location.pathname !== path) throw new Error('The page changed; read the result again.');
+      // Send only the fields the parser needs, excluding true-location data.
+      send({type: 'result', token: match[1], game: {state: game.state, mapName: game.mapName,
+        player: {guesses: game.player?.guesses?.map(guess => ({roundScore: guess.roundScore}))}}});
+    } catch (error) { $('error').textContent = `${error.message} Use manual checks if this result format is unsupported.`; }
+    finally { loading = false; renderResult(); }
+  };
+  $('result-map').onchange = renderResult;
+  $('result-bonus').oninput = renderResult;
+  function renderResult() {
+    if (!state) return;
+    $('capture').disabled = loading;
+    if (result && location.pathname !== capturePath) result = null;
+    $('result-summary').textContent = loading ? 'Reading completed scores…' : result ? `${result.mapName || 'Unknown map'} · ${result.total} total · ${result.best} best location` : 'No result captured.';
+    candidates = [];
+    const group = $('result-map').value, bonus = Number($('result-bonus').value);
+    if (result && group && Number.isInteger(bonus) && bonus >= 0 && bonus <= 100000) {
+      candidates = state.locations.filter(loc => {
+        if (loc.checked || loc.pending || loc.group !== group) return false;
+        const match = /^(\d+(?:\.\d+)?)k (location|round)$/i.exec(loc.name.slice(loc.name.indexOf(':') + 1).trim());
+        return match && (match[2].toLowerCase() === 'location' ? result.best : result.total + bonus) >= Number(match[1]) * 1000;
+      });
+    }
+    $('suggestions').innerHTML = candidates.map(loc => `<div class="item">${escape(loc.name)}</div>`).join('');
+    $('submit-result').disabled = !state.connected || !candidates.length;
+  }
+  $('submit-result').onclick = () => {
+    renderResult();
+    if (!candidates.length) return;
+    if (confirm(`Confirm this AP map and bonus are correct and you followed your unlock restrictions. Send these ${candidates.length} checks?\n\n${candidates.map(loc => loc.name).join('\n')}`)) {
+      send({type: 'score-checks', result, group: $('result-map').value, bonus: Number($('result-bonus').value)});
+    }
+  };
+  setInterval(() => { if (result && location.pathname !== capturePath) { result = null; renderResult(); } }, 1000);
   $('goal').onclick = () => {
     if (confirm('Have you met your GeoRando medal goal? This declares victory to the AP server.')) send({type: 'goal'});
   };
@@ -71,6 +125,11 @@
     else { confirmId = id; renderChecks(); }
   };
   function render(value) {
+    if (state && (state.seed !== value.seed || JSON.stringify(state.settings) !== JSON.stringify(value.settings))) {
+      result = null;
+      $('result-bonus').value = '0';
+      $('result-map').value = '';
+    }
     state = value;
     if (!initialized) {
       ['server', 'player', 'game'].forEach(key => $(key).value = state.settings[key]);
@@ -83,6 +142,9 @@
     const groups = [...new Set(state.locations.map(loc => loc.group))].sort();
     $('group').innerHTML = '<option value="">All groups</option>' + groups.map(group => `<option value="${escape(group)}">${escape(group)}</option>`).join('');
     if (groups.includes(selected)) $('group').value = selected;
+    const selectedMap = $('result-map').value;
+    $('result-map').innerHTML = '<option value="">Choose map…</option>' + groups.filter(group => state.locations.some(loc => loc.group === group && /k (location|round)$/i.test(loc.name))).map(group => `<option value="${escape(group)}">${escape(group)}</option>`).join('');
+    if (groups.includes(selectedMap)) $('result-map').value = selectedMap;
     const a = state.allowances;
     $('allowances').innerHTML = `<p>Time: <strong>${a.seconds}s</strong> · Move: <strong>${escape(a.movement)}</strong></p><p>Round bonus: +${a.roundBonus} · Country bonus: +${a.countryBonus}</p>` + a.features.map(f => `<span class="feature ${f.unlocked ? 'unlocked' : ''}">${f.unlocked ? '✓' : '🔒'} ${escape(f.name)}</span>`).join('');
     $('items').innerHTML = Object.entries(state.counts).sort(([a], [b]) => a.localeCompare(b)).map(([name, count]) => `<div class="item"><span>${escape(name)}</span><strong>×${count}</strong></div>`).join('') || '<p class="muted">No items received.</p>';
@@ -90,11 +152,16 @@
     $('goal').disabled = !state.connected || state.goal;
     $('goal').textContent = state.goal ? 'Victory declared' : 'Declare victory…';
     renderChecks();
+    renderResult();
   }
   function connectPort() {
     try {
       port = chrome.runtime.connect({name: 'georando-panel'});
-      port.onMessage.addListener(message => { if (message.type === 'state') render(message.value); else if (message.type === 'error') $('error').textContent = message.text; });
+      port.onMessage.addListener(message => {
+        if (message.type === 'state') render(message.value);
+        else if (message.type === 'error') $('error').textContent = message.text;
+        else if (message.type === 'result' && location.pathname === capturePath) { result = message.value; renderResult(); }
+      });
       port.onDisconnect.addListener(() => {
         const error = chrome.runtime.lastError;
         $('status').textContent = 'Reconnecting to extension…';

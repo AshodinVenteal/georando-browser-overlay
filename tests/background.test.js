@@ -62,6 +62,15 @@ test('AP handshake, exact world package, inventory sync and server confirmation'
   assert.equal(latest().locations.find(loc => loc.id === 101).pending, false);
   await command({type: 'check', id: 999});
   assert.equal(messages.at(-1).type, 'error');
+  const completed = {state: 'finished', mapName: 'Map', player: {guesses: [2500,100,100,100,100].map(amount => ({roundScore: {amount}}))}};
+  await command({type: 'result', token: 'test', game: completed});
+  const result = messages.at(-1).value;
+  assert.equal(messages.at(-1).type, 'result');
+  await command({type: 'score-checks', result, group: 'Map', bonus: 0});
+  assert.deepEqual(socket.sent.at(-1), {cmd: 'LocationChecks', locations: [102]});
+  assert.equal(latest().checked, 1);
+  socket.receive({cmd: 'RoomUpdate', checked_locations: [102]});
+  assert.equal(latest().checked, 2);
   await command({type: 'goal'});
   assert.deepEqual(socket.sent.at(-1), {cmd: 'StatusUpdate', status: 30});
   await command({type: 'disconnect'});

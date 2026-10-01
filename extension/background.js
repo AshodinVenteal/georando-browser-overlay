@@ -1,4 +1,5 @@
 import {socketAddress, mergeItems, inventory, allowances} from './core.js';
+import {completedResult, scoreSuggestions} from './results.js';
 
 let socket, heartbeat, retryTimer, generation = 0;
 let settings = {server: 'archipelago.gg:38281', player: '', game: 'Manual_GeoGuessr_arborelia'};
@@ -131,7 +132,7 @@ function handle(p) {
       break;
   }
 }
-async function command(message) {
+async function command(message, port) {
   await ready;
   if (message.type === 'connect') {
     const next = {server: socketAddress(message.settings.server), player: message.settings.player.trim(), game: message.settings.game.trim()};
@@ -152,6 +153,19 @@ async function command(message) {
     await chrome.storage.session.set({state});
     send({cmd: 'LocationChecks', locations: [id]});
     note('Check sent; waiting for server confirmation.');
+  } else if (message.type === 'result') {
+    const result = completedResult(message.game, message.token);
+    port.postMessage({type: 'result', value: result});
+    return;
+  } else if (message.type === 'score-checks') {
+    if (!state.authenticated) throw new Error('Connect before sending result checks.');
+    const locations = snapshot().locations;
+    const earned = scoreSuggestions(message.result, message.group, message.bonus, locations);
+    if (!earned.length) throw new Error('No new score checks match this result.');
+    state.pending.push(...earned.map(loc => loc.id));
+    await chrome.storage.session.set({state});
+    send({cmd: 'LocationChecks', locations: earned.map(loc => loc.id)});
+    note(`Sent ${earned.length} score checks for ${message.group}; awaiting confirmation.`);
   } else if (message.type === 'goal') {
     if (!state.authenticated) throw new Error('Connect before declaring victory.');
     send({cmd: 'StatusUpdate', status: 30}); state.goal = true; note('Victory declared to Archipelago.');
@@ -161,7 +175,7 @@ async function command(message) {
 chrome.runtime.onConnect.addListener(port => {
   if (port.name !== 'georando-panel' || !/^https:\/\/(www\.)?geoguessr\.com\//.test(port.sender?.url || '')) return;
   ports.add(port); ready.then(() => port.postMessage({type: 'state', value: snapshot()}));
-  port.onMessage.addListener(message => command(message).catch(error => port.postMessage({type: 'error', text: error.message})));
+  port.onMessage.addListener(message => command(message, port).catch(error => port.postMessage({type: 'error', text: error.message})));
   port.onDisconnect.addListener(() => ports.delete(port));
 });
 chrome.alarms.onAlarm.addListener(async alarm => { await ready; if (alarm.name === 'reconnect' && wanted) openSocket(); });
