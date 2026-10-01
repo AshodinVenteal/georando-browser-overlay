@@ -2,20 +2,35 @@
   if (document.getElementById('georando-ap-host')) return;
   const host = document.createElement('div');
   host.id = 'georando-ap-host';
-  host.style.cssText = 'position:fixed;top:12px;left:12px;z-index:2147483647;pointer-events:auto;';
+  host.style.cssText = 'position:fixed;top:100px;left:16px;z-index:2147483647;pointer-events:none;';
   const root = host.attachShadow({mode: 'closed'});
   root.innerHTML = `
     <style>
       :host{all:initial;color-scheme:dark}*{box-sizing:border-box}
       .panel{width:min(380px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow:auto;background:#141920f5;color:#edf3fa;border:1px solid #465365;border-radius:12px;box-shadow:0 8px 32px #0007;font:14px/1.4 system-ui,sans-serif}
+      .panel,.badge{pointer-events:auto;transition:opacity .18s ease}
+      .playing .panel,.playing .badge{opacity:var(--play-opacity,.25)}
+      .playing .panel:hover,.playing .panel:focus-within,.playing .badge:hover,.playing .badge:focus-visible{opacity:1}
+      .drag-handle{cursor:grab;touch-action:none;user-select:none}.dragging .drag-handle{cursor:grabbing}
+      .badge{max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:13px/1.4 system-ui,sans-serif}
+      .badge-grip{padding:3px 8px;display:inline-block;border-right:1px solid #465365;margin-right:6px}
+      .checkbox{display:flex;gap:8px;align-items:center}.checkbox input{width:auto}
+      input[type=range]{padding:0}
+      @media(prefers-reduced-motion:reduce){.panel,.badge{transition:none}}
       header{display:flex;align-items:center;gap:8px;padding:10px;background:#202a36;position:sticky;top:0;z-index:1}header strong{flex:1}header button{width:auto;padding:4px 9px}
       section{padding:12px;border-top:1px solid #344152}h2{font-size:14px;margin:0 0 8px}p{margin:6px 0}small,.muted{color:#a7b6c9;font-size:12px}
       label{display:block;font-size:12px;margin:8px 0 4px}input,button,select{font:inherit;background:#0f141c;color:#edf3fa;border:1px solid #465365;border-radius:6px;padding:7px;width:100%}button{cursor:pointer}button:hover{border-color:#7cdbac}button:disabled{opacity:.5;cursor:default}.primary{background:#25563e}.row{display:flex;gap:6px;margin-top:8px}.row>*{flex:1}
       summary{cursor:pointer;font-weight:600}.status{color:#ffc978;overflow-wrap:anywhere}.connected{color:#7cdbac}.error{color:#ff9898}.list{max-height:260px;overflow:auto;display:grid;gap:6px;margin-top:8px}.check{text-align:left}.done{text-decoration:line-through;opacity:.5}.item{display:flex;justify-content:space-between;border-bottom:1px solid #344152;padding:4px;gap:10px}.feature{display:inline-block;padding:3px 6px;background:#26323f;border-radius:5px;margin:3px;color:#a7b6c9}.unlocked{color:#7cdbac}.log{max-height:140px;overflow:auto;font-size:12px;overflow-wrap:anywhere}.log p{padding-bottom:4px;border-bottom:1px solid #344152}.hidden{display:none!important}.badge{width:auto;background:#202a36;padding:9px 13px;box-shadow:0 4px 20px #0006}
     </style>
-    <button class="badge hidden" id="badge">AP · <span id="badge-status">Disconnected</span></button>
+    <div id="shell"><button class="badge hidden" id="badge" title="Open AP panel; drag the grip to reposition"><span class="badge-grip drag-handle" id="badge-grip">⠿</span>AP · <span id="badge-status">Disconnected</span></button>
     <div class="panel" id="panel">
-      <header><strong>GeoRando AP</strong><button id="dock" title="Move to the other side">⇄</button><button id="collapse" title="Collapse panel">−</button></header>
+      <header id="drag-header" class="drag-handle"><strong>GeoRando AP</strong><button id="dock" title="Move to the other side">⇄</button><button id="collapse" title="Collapse panel">−</button></header>
+      <section><details><summary>Overlay appearance</summary>
+        <label class="checkbox"><input type="checkbox" id="auto-collapse" checked>Collapse on game pages; expand on results</label>
+        <label for="play-opacity">Visibility while playing: <span id="opacity-label">25%</span></label><input id="play-opacity" type="range" min="5" max="100" step="5" value="25">
+        <p class="muted">Drag the header or badge grip to move the overlay. Hover or focus restores full visibility. Alt+Shift+G toggles the panel.</p>
+        <button id="reset-position">Reset position</button>
+      </details></section>
       <section><div id="status" class="status">Disconnected</div><div class="muted" id="progress"></div><p id="error" class="error" role="alert"></p></section>
       <section><details id="connection-settings" open><summary>Connection</summary>
         <label for="server">AP server</label><input id="server" placeholder="host:port or wss://host:port">
@@ -39,9 +54,11 @@
       <section><details><summary>Received items</summary><div id="items" class="list"></div></details></section>
       <section><details><summary>AP messages</summary><div id="log" class="log"></div></details></section>
       <section><button id="goal">Declare victory…</button><p class="muted">Use after meeting your generated world's medal goal.</p></section>
-    </div>`;
+    </div></div>`;
   const $ = id => root.getElementById(id);
-  let port, state, initialized = false, showCompleted = false, collapsed = false, confirmId = null, side = 'left';
+  let port, state, initialized = false, showCompleted = false, collapsed = false, confirmId = null;
+  let appearance = {autoCollapse: true, opacity: 25, x: 16, y: 100};
+  let route = '', dragging = null, suppressBadgeClick = false, saveTimer;
   let result = null, capturePath = '', candidates = [], loading = false;
   const escape = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
   function attach() {
@@ -49,10 +66,93 @@
     if (target && host.parentElement !== target) target.append(host);
   }
   attach();
-  document.addEventListener('fullscreenchange', attach);
-  function toggle() { collapsed = !collapsed; $('panel').classList.toggle('hidden', collapsed); $('badge').classList.toggle('hidden', !collapsed); }
-  $('collapse').onclick = toggle; $('badge').onclick = toggle;
-  $('dock').onclick = () => { side = side === 'left' ? 'right' : 'left'; host.style.left = side === 'left' ? '12px' : 'auto'; host.style.right = side === 'right' ? '12px' : 'auto'; };
+  document.addEventListener('fullscreenchange', () => { attach(); position(); });
+  function saveAppearance() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => chrome.storage.local.set({overlayAppearance: appearance}).catch(() => {}), 200);
+  }
+  function position() {
+    const visible = collapsed ? $('badge') : $('panel');
+    const width = visible.getBoundingClientRect().width || 250;
+    const x = Math.max(8, Math.min(appearance.x, Math.max(8, innerWidth - width - 8)));
+    const y = Math.max(8, Math.min(appearance.y, Math.max(8, innerHeight - 60)));
+    host.style.left = `${x}px`; host.style.top = `${y}px`; host.style.right = 'auto';
+    $('panel').style.maxHeight = `${Math.max(60, innerHeight - y - 8)}px`;
+  }
+  function setCollapsed(value) {
+    collapsed = value;
+    $('panel').classList.toggle('hidden', collapsed); $('badge').classList.toggle('hidden', !collapsed);
+    position();
+  }
+  function toggle() { setCollapsed(!collapsed); }
+  $('collapse').onclick = toggle;
+  $('badge').onclick = () => { if (suppressBadgeClick) { suppressBadgeClick = false; return; } toggle(); };
+  $('dock').onclick = () => {
+    const rect = host.getBoundingClientRect();
+    appearance.x = rect.left < innerWidth / 2 ? innerWidth - (collapsed ? 250 : 380) - 16 : 16;
+    position(); saveAppearance();
+  };
+  function routeAppearance(force = false) {
+    const path = location.pathname;
+    if (!force && route === path) return;
+    route = path;
+    // Route detection is deliberately independent of GeoGuessr's unstable CSS.
+    const playing = /^\/(game|challenge|duels|battle-royale|live-challenge)(\/|$)/.test(path);
+    $('shell').classList.toggle('playing', playing);
+    if (appearance.autoCollapse) {
+      if (playing) setCollapsed(true);
+      else if (/^\/results(\/|$)/.test(path)) setCollapsed(false);
+    }
+  }
+  function applyAppearance() {
+    $('auto-collapse').checked = appearance.autoCollapse;
+    $('play-opacity').value = appearance.opacity;
+    $('opacity-label').textContent = `${appearance.opacity}%`;
+    host.style.setProperty('--play-opacity', String(appearance.opacity / 100));
+    position(); routeAppearance(true);
+  }
+  $('auto-collapse').onchange = () => { appearance.autoCollapse = $('auto-collapse').checked; applyAppearance(); saveAppearance(); };
+  $('play-opacity').oninput = () => {
+    appearance.opacity = Number($('play-opacity').value);
+    $('opacity-label').textContent = `${appearance.opacity}%`;
+    host.style.setProperty('--play-opacity', String(appearance.opacity / 100)); saveAppearance();
+  };
+  $('reset-position').onclick = () => { appearance.x = 16; appearance.y = 100; position(); saveAppearance(); };
+  for (const handle of [$('drag-header'), $('badge-grip')]) {
+    handle.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || event.target.closest('button') && handle.id !== 'badge-grip') return;
+      const rect = host.getBoundingClientRect();
+      dragging = {pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, x: rect.left, y: rect.top, moved: false};
+      handle.setPointerCapture(event.pointerId); $('panel').classList.add('dragging'); event.preventDefault();
+    });
+    handle.addEventListener('pointermove', event => {
+      if (!dragging || event.pointerId !== dragging.pointerId) return;
+      const dx = event.clientX - dragging.startX, dy = event.clientY - dragging.startY;
+      if (Math.abs(dx) + Math.abs(dy) > 4) dragging.moved = true;
+      appearance.x = Math.max(8, dragging.x + dx); appearance.y = Math.max(8, dragging.y + dy); position();
+    });
+    function finishDrag(event) {
+      if (!dragging || event.pointerId !== dragging.pointerId) return;
+      suppressBadgeClick = handle.id === 'badge-grip' && dragging.moved;
+      if (suppressBadgeClick) setTimeout(() => { suppressBadgeClick = false; }, 100);
+      const rect = host.getBoundingClientRect(); appearance.x = rect.left; appearance.y = rect.top;
+      dragging = null; $('panel').classList.remove('dragging'); saveAppearance();
+    }
+    handle.addEventListener('pointerup', finishDrag); handle.addEventListener('pointercancel', finishDrag);
+  }
+  window.addEventListener('resize', position);
+  document.addEventListener('keydown', event => {
+    if (event.altKey && event.shiftKey && event.code === 'KeyG' && !event.repeat) { event.preventDefault(); toggle(); }
+  });
+  chrome.storage.local.get('overlayAppearance').then(saved => {
+    const value = saved.overlayAppearance;
+    if (value) appearance = {autoCollapse: typeof value.autoCollapse === 'boolean' ? value.autoCollapse : true,
+      opacity: Number.isFinite(value.opacity) ? Math.min(100, Math.max(5, value.opacity)) : 25,
+      x: Number.isFinite(value.x) ? value.x : 16, y: Number.isFinite(value.y) ? value.y : 100};
+    applyAppearance();
+  }).catch(() => applyAppearance());
+  applyAppearance();
+  setInterval(() => { routeAppearance(); attach(); }, 500);
   chrome.runtime.onMessage.addListener(message => { if (message.type === 'toggle') toggle(); });
   function send(message) {
     $('error').textContent = '';
@@ -125,6 +225,7 @@
     else { confirmId = id; renderChecks(); }
   };
   function render(value) {
+    if (value.connected && !state?.connected) $('connection-settings').open = false;
     if (state && (state.seed !== value.seed || JSON.stringify(state.settings) !== JSON.stringify(value.settings))) {
       result = null;
       $('result-bonus').value = '0';
@@ -153,6 +254,7 @@
     $('goal').textContent = state.goal ? 'Victory declared' : 'Declare victory…';
     renderChecks();
     renderResult();
+    position();
   }
   function connectPort() {
     try {
