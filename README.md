@@ -1,5 +1,23 @@
 # GeoRando Browser Overlay
 
+## Chrome / Edge extension (first testing version)
+
+The `extension/` folder contains a Manifest V3 extension that puts a collapsible AP panel directly on GeoGuessr. It supports manual checks, received items, unlock allowances, AP messages, and declaring victory. The background worker owns the connection so GeoGuessr navigation does not reset it. Chrome/Edge 116 or newer is required.
+
+1. Download this repository using **Code → Download ZIP**, and extract it.
+2. Open `chrome://extensions` (Chrome) or `edge://extensions` (Edge) and enable **Developer mode**.
+3. Choose **Load unpacked** and select the extracted `extension` folder, which contains `manifest.json`.
+4. Open or reload GeoGuessr. Enter your AP server, player name, and the exact `Manual_GeoGuessr_…` game name from your generated YAML. The suffix can differ from your slot name.
+5. Connect. Search for a check, click **Mark complete**, then click again to confirm it. The extension only marks it checked once the server acknowledges it.
+
+Use **−** to collapse the panel, **⇄** to move it to the other side, or the extension toolbar button to toggle it. It follows browser fullscreen and normal GeoGuessr page navigation. The extension retries dropped AP connections and resends pending checks only within the same configured slot and room seed. Room passwords stay in extension session storage, which is cleared when the browser restarts; saved server/player/game settings remain in local extension storage.
+
+This version does not yet capture GeoGuessr results automatically, enforce movement/timer/visibility restrictions, evaluate Manual access logic, or award medals automatically. Use GeoRando's normal gameplay rules and submit earned checks manually. Unlock allowances summarize the received inventory; the item list includes map unlocks and traps. Victory is an explicit declaration after you meet your configured goal.
+
+Development checks: run `npm test` with a recent Node.js installation. No dependency installation is required. Tests cover protocol state transitions with a mock AP socket and core item handling; a real AP room and GeoGuessr browser test are still required.
+
+## Standalone browser page
+
 This is a standalone fullscreen browser companion for arborelia's current **Manual_GeoGuessr_arborelia** world. It connects directly to an Archipelago server over its WebSocket protocol, shows the generated location list and received items, and lets you submit GeoRando checks without keeping the Manual Client in front of GeoGuessr.
 
 ## Use
