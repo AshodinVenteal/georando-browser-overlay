@@ -1,13 +1,18 @@
 {
   "manifest_version": 3,
   "name": "GeoRando AP Companion",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Archipelago Manual GeoRando checks and unlocks inside GeoGuessr.",
   "minimum_chrome_version": "116",
   "permissions": ["storage", "alarms"],
   "background": {"service_worker": "background.js", "type": "module"},
   "action": {"default_title": "Toggle GeoRando AP panel"},
   "content_scripts": [{
+    "matches": ["https://www.geoguessr.com/*", "https://geoguessr.com/*"],
+    "js": ["game-controls.js"],
+    "world": "MAIN",
+    "run_at": "document_start"
+  }, {
     "matches": ["https://www.geoguessr.com/*", "https://geoguessr.com/*"],
     "js": ["content.js"],
     "run_at": "document_idle"

@@ -18,7 +18,18 @@ Vivaldi: open `vivaldi://extensions` and use **Load unpacked** with the reposito
 
 Version 0.2 adds an experimental **Completed-game score checks** section. On a classic `/results/<token>` page, choose **Read completed result**, select the matching AP map, and enter the round bonus that applied to that run (zero by default). Review the proposed checks and choose **Review and send score checks**. Bonuses apply to five-location totals only, not individual location scores. The parser accepts only a finished game with five valid player scores; unsupported modes/formats fall back to manual checks. It reads the game's endpoint only when you press the button on a results page and retains only scores and the map label. This endpoint is not a supported public GeoGuessr API and still needs live testing.
 
-This version does not yet identify countries, capture streaks, enforce movement/timer/visibility restrictions, evaluate Manual access logic, or award medals automatically. Use GeoRando's normal gameplay rules. Unlock allowances summarize the received inventory; the item list includes map unlocks and traps. Victory is an explicit declaration after you meet your configured goal. To update an unpacked extension, replace its files, press **Reload** on the extensions page, and reload GeoGuessr.
+Version 0.4 adds experimental automatic AP game controls for classic `/game/<token>` pages:
+
+- Pan and panorama zoom stay locked until their items arrive.
+- Progressive Move enables 0, 1, 10, or unlimited panorama changes per round. Changes beyond the budget are reverted.
+- The compass is hidden until unlocked using GeoGuessr DOM selectors.
+- Terrain, satellite, and hybrid guess-map views are gated by their AP items. Choose an unlocked view in **AP game controls**.
+- The overlay starts a 10-second viewing deadline plus received time items when it observes a new classic round. Time items extend the deadline when received. At expiry, Street View is covered while the guess map remains available; the extension does not automatically submit a guess or alter GeoGuessr's native timer. Choose an unlimited/long native timer so it does not end the round before the AP deadline.
+- A locked or unmatched map is covered based on its result label and your AP map items. This does not prevent the website from creating the game. The car item removes an experimental lower-image cover; that cover is not a panorama shader and does not reliably hide the car at every pitch/zoom.
+
+Connect to AP before starting a classic game. Reload an already-open game after updating the extension to capture its viewer and round state. The **AP game controls** status reports missing viewer/round detection and locked/unmatched maps. If the current GeoGuessr UI/API changes, these controls may require adjustment. Challenge, competitive, and other modes are not controlled. The adapter passively observes the game's existing responses, retains only round number/map label/guess count, and does not send true location data to AP. No live account test has been performed yet.
+
+Traps, extra Unity-script map views, map fragments, country/streak automation, Manual access-logic evaluation, and automatic medal/victory handling remain unfinished. Victory is an explicit declaration after you meet your configured goal. To update an unpacked extension, replace its files, press **Reload** on the extensions page, and reload GeoGuessr.
 
 Development checks: run `npm test` with a recent Node.js installation. No dependency installation is required. Tests cover protocol state transitions with a mock AP socket and core item handling; a real AP room and GeoGuessr browser test are still required.
 

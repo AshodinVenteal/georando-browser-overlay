@@ -1,4 +1,4 @@
-import {socketAddress, mergeItems, inventory, allowances} from './core.js';
+import {socketAddress, mergeItems, inventory, allowances, restrictionPolicy} from './core.js';
 import {completedResult, scoreSuggestions} from './results.js';
 
 let socket, heartbeat, retryTimer, generation = 0;
@@ -31,7 +31,7 @@ function snapshot() {
     .sort((a, b) => a.name.localeCompare(b.name));
   return {settings, status: state.status, connected: state.authenticated, ready: !!locations.length,
     seed: state.seed, checked: state.checked.length, total: valid.size, locations, counts,
-    allowances: allowances(counts), log: state.log, goal: state.goal};
+    allowances: allowances(counts), restrictions: restrictionPolicy(counts, locations, !!state.itemsSynced && !!locations.length), log: state.log, goal: state.goal};
 }
 function broadcast() {
   chrome.storage.session.set({state, wanted, password});
@@ -108,6 +108,7 @@ function handle(p) {
     case 'ReceivedItems': {
       const merged = mergeItems(state.items, p);
       state.items = merged.items;
+      if (p.index === 0) state.itemsSynced = true;
       if (merged.sync) send({cmd: 'Sync'});
       break;
     }

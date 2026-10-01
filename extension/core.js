@@ -41,3 +41,14 @@ export function allowances(counts) {
     features: ['Pan', 'Zoom', 'Compass', 'Car visibility', 'Terrain Map View', 'Satellite Map View', 'OpenStreetMap View', 'Borders Map View', 'Coverage Overlay', 'Time Machine', 'Show Author Names'].map(name => ({name, unlocked: count(name) > 0}))
   };
 }
+
+export function restrictionPolicy(counts, locations, enabled) {
+  const a = allowances(counts);
+  const has = name => a.features.some(feature => feature.name === name && feature.unlocked);
+  const groups = [...new Set(locations.filter(loc => /k (round|location)$/i.test(loc.name)).map(loc => loc.group))];
+  return {enabled, pan: has('Pan'), zoom: has('Zoom'), compass: has('Compass'), car: has('Car visibility'),
+    seconds: a.seconds, moves: a.movement === 'Unlimited' ? -1 : a.movement === '10 steps' ? 10 : a.movement === '1 step' ? 1 : 0,
+    terrain: has('Terrain Map View'), satellite: has('Satellite Map View'),
+    unlockedMaps: groups.filter(group => Object.keys(counts).some(name => counts[name] > 0 && (name === group || name.startsWith(`${group}, by `)))),
+    knownMaps: groups};
+}

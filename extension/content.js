@@ -40,7 +40,10 @@
         <label for="password">Room password (optional)</label><input id="password" type="password" autocomplete="off">
         <div class="row"><button class="primary" id="connect">Connect</button><button id="disconnect">Disconnect</button></div>
       </details></section>
-      <section><h2>Unlock allowances</h2><div id="allowances" class="muted">Connect to load received items.</div><p class="muted">Set game restrictions manually. Restriction enforcement is not enabled in this version.</p></section>
+      <section><h2>AP game controls</h2><p id="controls-status" class="status">Waiting for AP inventory</p><div id="allowances" class="muted">Connect to load received items.</div>
+        <label for="map-view">Guess map view</label><select id="map-view"><option value="roadmap">Road map</option><option value="terrain">Terrain (locked)</option><option value="satellite">Satellite (locked)</option><option value="hybrid">Hybrid (locked)</option></select>
+        <p class="muted">Automatic controls support classic /game/ pages. Connect before starting, and reload an existing game to attach controls. Car visibility uses an experimental lower-image cover. Traps and non-Google map views are not enforced yet.</p>
+      </section>
       <section><details><summary>Completed-game score checks (experimental)</summary>
         <p class="muted">On a classic /results/ page, read your completed game, select its AP map, and review the suggested checks.</p>
         <button id="capture">Read completed result</button><p id="result-summary" class="muted">No result captured.</p>
@@ -61,6 +64,14 @@
   let route = '', dragging = null, suppressBadgeClick = false, saveTimer;
   let result = null, capturePath = '', candidates = [], loading = false;
   const escape = text => String(text).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
+  function applyGamePolicy(mapType) {
+    if (state?.restrictions) window.postMessage({channel: 'georando-controls-v1', type: 'policy', value: state.restrictions, mapType}, location.origin);
+  }
+  window.addEventListener('message', event => {
+    if (event.source === window && event.origin === location.origin && event.data?.channel === 'georando-controls-v1' && event.data.type === 'status' && typeof event.data.value === 'string') $('controls-status').textContent = event.data.value;
+  });
+  $('map-view').onchange = () => applyGamePolicy($('map-view').value);
+  setInterval(() => applyGamePolicy(), 1000);
   function attach() {
     const target = document.fullscreenElement || document.body;
     if (target && host.parentElement !== target) target.append(host);
@@ -247,6 +258,13 @@
     $('result-map').innerHTML = '<option value="">Choose map…</option>' + groups.filter(group => state.locations.some(loc => loc.group === group && /k (location|round)$/i.test(loc.name))).map(group => `<option value="${escape(group)}">${escape(group)}</option>`).join('');
     if (groups.includes(selectedMap)) $('result-map').value = selectedMap;
     const a = state.allowances;
+    for (const option of $('map-view').options) {
+      const allowed = option.value === 'roadmap' || (option.value === 'terrain' ? state.restrictions.terrain : state.restrictions.satellite);
+      option.disabled = !allowed;
+      option.textContent = ({roadmap: 'Road map', terrain: 'Terrain', satellite: 'Satellite', hybrid: 'Hybrid'}[option.value]) + (allowed ? '' : ' (locked)');
+    }
+    if ($('map-view').selectedOptions[0]?.disabled) $('map-view').value = 'roadmap';
+    applyGamePolicy();
     $('allowances').innerHTML = `<p>Time: <strong>${a.seconds}s</strong> · Move: <strong>${escape(a.movement)}</strong></p><p>Round bonus: +${a.roundBonus} · Country bonus: +${a.countryBonus}</p>` + a.features.map(f => `<span class="feature ${f.unlocked ? 'unlocked' : ''}">${f.unlocked ? '✓' : '🔒'} ${escape(f.name)}</span>`).join('');
     $('items').innerHTML = Object.entries(state.counts).sort(([a], [b]) => a.localeCompare(b)).map(([name, count]) => `<div class="item"><span>${escape(name)}</span><strong>×${count}</strong></div>`).join('') || '<p class="muted">No items received.</p>';
     $('log').innerHTML = state.log.slice().reverse().map(entry => `<p>${escape(new Date(entry.time).toLocaleTimeString())} · ${escape(entry.text)}</p>`).join('');
