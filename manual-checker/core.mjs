@@ -40,7 +40,7 @@ export function availableChecks(result,snapshots) {
   if (signature(snapshot.items) !== signature(result.items)) return {ids:null,reason:'Logic snapshot is stale: received items changed. Export and import a fresh snapshot.'};
   if (JSON.stringify([...snapshot.checked].sort((a,b)=>a-b)) !== JSON.stringify([...result.checked].sort((a,b)=>a-b))) return {ids:null,reason:'Logic snapshot is stale: completed checks changed.'};
   const missing = new Set(result.missing);
-  return {ids:snapshot.in_logic.filter(id=>missing.has(id)),reason:`Universal Tracker evaluated ${snapshot.generated_at}.`};
+  return {ids:snapshot.in_logic.filter(id=>missing.has(id)),reason:`${snapshot.engine||'Universal Tracker'} evaluated ${snapshot.generated_at}.${snapshot.logic_source?' '+snapshot.logic_source+'.':''}`};
 }
 export function scan({server,name,password='',Socket=globalThis.WebSocket,onStage=()=>{},timeoutMs=25000}) {
   return new Promise((resolve,reject)=>{
