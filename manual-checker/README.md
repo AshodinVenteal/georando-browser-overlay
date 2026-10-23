@@ -1,5 +1,40 @@
 # Archipelago Manual Checker
 
+## Online: no more manual UT refreshes for your room
+
+Build **2026-10-23.1** bundles seed-specific browser logic for AshedUpFusion (slot 2),
+PaperAsh64 (slot 38), and AshTrigger (slot 3) in seed `14834085843224584573`.
+Click **Update all slots** once. The visible tab then reconnects every 60 seconds and
+recalculates reachable unfinished checks from the latest received items and checked
+locations. Disable the checkbox to use manual updates only. Closing or hiding the tab
+does not run background updates. No Python hosting, UT snapshot import, or engine URL
+is needed for these three slots. An old saved engine URL is bypassed for bundled graphs.
+
+**Download current UT snapshots** creates a fresh snapshot JSON in the browser.
+**Download seed graphs** exports the reusable rules (not your live inventory). Both files
+can be imported again through the JSON picker. NEW item badges compare each successful
+update against the previous one, including automatic updates.
+
+Fusion/Paper Mario graphs are exported from the actual UT-reconstructed APWorld using
+`node build-browser-graphs.mjs`. The exporter serializes Paper Mario's parsed rule ASTs,
+Fusion's item/ammo/energy requirements with option adjustments, and supported composed
+rules. Unknown rule types fail export. The browser interprets an allowlisted expression
+format; it does not execute Python or imported JavaScript. Events and reachability are
+swept to a fixed point; unchecked treasures never supply items. Graph identity, slot data,
+data package, and location coverage must match the connected seed.
+
+`node verify-browser-graphs.mjs` compares exact location lists and event rewards against
+native UT for both games across current, empty, progression-removed, all-location,
+maximal-progression, and partial inventories. `node verify-auto-page.mjs` checks the actual
+page update handler against the live room, downloads, cached graphs, and the refresh timer.
+
+For a **different seed**, a new graph must be generated once using the matching APWorld
+and original player YAML. When a configured Python backend supports `/graph`, the page
+requests that export automatically for Fusion/Paper Mario, validates and caches it, then
+performs subsequent evaluations locally. GitHub Pages alone cannot generate arbitrary
+APWorld Python logic for unknown games/seeds. The bundled graphs intentionally reject a
+different seed instead of applying this room's rules to it. CT retains its ROM importer.
+
 ## Run locally with Universal Tracker
 
 Open http://localhost:8000 after running `Start-Local.ps1`. The local logic API runs at
@@ -19,9 +54,8 @@ game worlds/YAMLs, then `Start-Local.ps1`. Both services bind only to loopback. 
 `Stop-Local.ps1` to stop them. See `backend/requirements.txt` for Python dependencies;
 individual APWorlds may have additional requirements.
 
-The localhost Python configuration is for local testing. Fusion and Paper Mario still need
-a public HTTPS logic endpoint for remote evaluation. The bundled CT seed evaluates in the
-browser and does not need Python hosting.
+The localhost Python configuration is for local generation/testing and non-bundled seeds.
+All three bundled slots evaluate directly in the browser without Python hosting.
 
 Verified against the supplied room: AshedUpFusion had 6 reachable checks / 110 unfinished;
 PaperAsh64 had 15 / 278. Removing received progression items reduced those counts to 0

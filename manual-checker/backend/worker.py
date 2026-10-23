@@ -20,6 +20,9 @@ def evaluate(data):
     from worlds.tracker.TrackerCore import TrackerCore
     from NetUtils import NetworkItem
     from worlds.tracker import UT_VERSION, TrackerWorld
+    if os.environ.get('UT_EXPORT_BROWSER_GRAPH') == '1':
+        from browser_graph import install_capture
+        install_capture()
 
     player_dir = os.environ.get('UT_PLAYER_DIR')
     default_players = runtime / 'Players'
@@ -52,6 +55,9 @@ def evaluate(data):
     if core.multiworld is None or core.player_id is None:
         raise ValueError(core.gen_error or f'Universal Tracker could not reconstruct {game}.')
     world = core.get_current_world()
+    if os.environ.get('UT_EXPORT_BROWSER_GRAPH') == '1':
+        from browser_graph import export
+        return export(core, data)
     storage_keys = getattr(world, 'found_entrances_datastorage_key', None)
     if storage_keys:
         if isinstance(storage_keys, str):

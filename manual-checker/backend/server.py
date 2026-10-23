@@ -41,7 +41,7 @@ class Handler(BaseHTTPRequestHandler):
                    {'service': 'Universal Tracker logic API', 'status': 'ready'} if self.path == '/health' else {'error': 'Not found'})
 
     def do_POST(self):
-        if self.path != '/evaluate':
+        if self.path not in ('/evaluate','/graph'):
             return self.reply(404, {'error': 'Not found'})
         if self.headers.get('Origin') and self.headers['Origin'] not in ORIGINS:
             return self.reply(403, {'error': 'Origin not allowed'})
@@ -58,8 +58,14 @@ class Handler(BaseHTTPRequestHandler):
             if not CAPACITY.acquire(blocking=False):
                 return self.reply(429, {'error': 'Logic engine busy; retry shortly'})
             try:
+                worker_env = dict(os.environ)
+                worker_env.pop('UT_EXPORT_BROWSER_GRAPH', None)
+                if self.path == '/graph':
+                    if data['game'] not in ('Paper Mario','Metroid Fusion'):
+                        return self.reply(422, {'error':'Browser graph export is not supported for this game.'})
+                    worker_env['UT_EXPORT_BROWSER_GRAPH'] = '1'
                 process = subprocess.run([sys.executable, str(WORKER)], input=json.dumps(data),
-                                         capture_output=True, text=True, timeout=90)
+                                         capture_output=True, text=True, timeout=90, env=worker_env)
                 result = json.loads(process.stdout)
                 self.reply(422 if process.returncode else 200, result)
             finally:

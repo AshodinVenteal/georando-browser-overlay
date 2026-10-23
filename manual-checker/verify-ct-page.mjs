@@ -8,6 +8,7 @@ function element(id){
   return elements.get(id);
 }
 globalThis.document={getElementById:element,querySelectorAll:()=>[]};
+globalThis.setInterval=()=>0;
 globalThis.location={hostname:'ashodinventeal.github.io',protocol:'https:'};
 const stored=new Map([['ap-manual-checker',JSON.stringify({server:'wss://archipelago.gg:63304',backend:'https://offline.invalid',profiles:[{slot:'AshTrigger',label:''}]})]]);
 globalThis.localStorage={getItem:key=>stored.get(key),setItem:(key,value)=>stored.set(key,value)};
