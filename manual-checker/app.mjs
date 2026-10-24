@@ -1,4 +1,5 @@
-import {socketAddress,scan,identity,history,itemName,locationName,availableChecks} from './core.mjs?v=20261023-1';
+import {socketAddress,scan,identity,history,itemName,locationName,availableChecks} from './core.mjs?v=20261023-2';
+import {attachRoomSweep} from './room-sweep-ui.mjs?v=20261023-2';
 import {CT_GAME,evaluateCT,validateCT} from './ct-logic.mjs?v=20261005-4';
 import {evaluateGraph,validateGraph} from './browser-logic.mjs?v=20261023-1';
 const $=id=>document.getElementById(id);
@@ -160,3 +161,4 @@ $('update').onclick=async()=>{
 };
 setInterval(()=>{if(hasUpdated&&!updating&&!document.hidden&&$('auto-refresh').checked)$('update').onclick();},60000);
 profiles();render();
+attachRoomSweep({getReference:()=>state.results.find(r=>!r.error)});

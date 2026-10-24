@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 const base='https://ashodinventeal.github.io/georando-browser-overlay/manual-checker/';
-for (const file of ['index.html','core.mjs','app.mjs','ct-logic.mjs','browser-logic.mjs',
+for (const file of ['index.html','core.mjs','app.mjs','ct-logic.mjs','browser-logic.mjs','room-sweep.mjs','room-sweep-ui.mjs',
   'data/ct-14834085843224584573-0-3.json','data/graph-14834085843224584573-0-2.json','data/graph-14834085843224584573-0-38.json']) {
   const response=await fetch(`${base}${file}?verify=${Date.now()}`);
   assert.equal(response.status,200,`${file} HTTP status`);

@@ -50,6 +50,13 @@ element('export-graphs').onclick();
 const graphs=await (await fetchNative(downloaded.href)).json();
 assert.equal(graphs.graphs.length,3);
 console.log('All three slots: online handler twice, offline backend bypassed, automatic refresh controls and JSON downloads passed.');
+await element('sweep-room').onclick();
+assert.match(element('sweep-status').textContent,/Sweep complete\. 0 slots failed/);
+assert.match(element('sweep-results').innerHTML,/48\/48 player slots sampled/);
+assert.match(element('sweep-results').innerHTML,/NOT early-sphere results/);
+assert.match(element('sweep-results').innerHTML,/sphere status unknown/);
+assert.doesNotMatch(element('sweep-results').innerHTML,/undefined|NaN/);
+console.log('Room sweep page handler: 48 live slots rendered, unresolved hints shown, no guessed spheres.');
 async function fetchNative(url){
   // Node resolves blob URLs via its buffer API without internet.
   const {resolveObjectURL}=await import('node:buffer');

@@ -1,5 +1,48 @@
 # Archipelago Manual Checker
 
+## Room-wide priorities and early-sphere audits (2026-10-23.2)
+
+After **Update all slots**, click **Sweep room priorities**. It samples all player slots
+on your team using up to three read-only Tracker connections at once, excludes group/
+spectator slots, and reads existing hint feeds and client statuses. It never sends checks,
+scouts, chat, status updates, or hint purchases. The room sweep is manual, separate from
+the personal-slot 60-second refresh, to avoid repeatedly connecting dozens of slots.
+
+Without a full sphere index it ranks games holding unresolved priority/progression hints,
+showing the recipient and location. Hints marked Avoid and already-found checks are
+excluded. Item names are hidden unless the spoiler checkbox is enabled. Failed slots are
+reported as unknown, not cleared. A previous sweep is stored locally so subsequent sweeps
+show newly checked locations; no progress between observations is **not** proof of player
+inactivity. Each slot is sampled at a slightly different time. A goal-complete game can
+still contain items needed elsewhere.
+
+For exact original early spheres, import an owner-exported `ap-sphere-index-v1` JSON and
+choose a maximum sphere (default 3). Games are ranked by their earliest remaining indexed
+check. These are generation/sendable spheres, numbered from 1, **not** current inventory
+reachability or a proof that every listed item is still needed. The public AP sphere
+tracker only lists **completed** checks, so it cannot provide the remaining sphere index.
+The application never infers missing sphere membership from that public page.
+
+The seed owner can export from the **original** `.archipelago` multidata using the local
+runtime's restricted unpickler (never `pickle.load`):
+
+```powershell
+.\.venv\Scripts\python.exe backend\export_sphere_index.py C:\path\original.archipelago C:\path\sphere-index.json
+```
+
+By default the export contains only seed/team, sphere numbers, finder slots and location
+IDs. `--include-items` also exports receiver/item/flags and therefore reveals unretrieved
+item placements. Do not publish those files or the original multidata unintentionally.
+Exports are supplied/imported by the owner; the page validates identity and structure,
+not an independent cryptographic attestation of the seed generator. **Remove sphere
+index** returns to the hint-only view. No original sphere index for the current room is
+bundled. Owner exports are not uploaded by the deployment script.
+
+`node --test room-sweep.test.mjs room-sweep-ui.test.mjs` tests ranking and the page view.
+`node verify-room-sweep.mjs --all` checks all slots in the supplied live room. At initial
+verification all 48 player slots were sampled successfully, with 463 distinct existing
+hints (including found hints, which are excluded from the action list).
+
 ## Online: no more manual UT refreshes for your room
 
 Build **2026-10-23.1** bundles seed-specific browser logic for AshedUpFusion (slot 2),
